@@ -1,11 +1,11 @@
 -- 手机横屏端罗布乐思多功能脚本
 -- 专为移动设备横屏模式优化
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
 local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -30,12 +30,12 @@ local rootPart = character:WaitForChild("HumanoidRootPart")
 -- 状态变量
 local flyEnabled = false
 local noclipEnabled = false
--- 移除superClimbEnabled变量，因为万能爬墙功能已删除
 local speedEnabled = false
 local backgroundEnabled = false
 local guiVisible = true
-local flySpeed = 30 -- 手机端飞行速度调低
+local flySpeed = 30
 local walkSpeed = 16
+local originalWalkSpeed = humanoid.WalkSpeed
 local bodyVelocity, bodyGyro
 
 -- 创建手机优化控制GUI
@@ -76,11 +76,11 @@ local function createMobileGUI()
     uiListLayout.Parent = buttonContainer
 
     -- 创建功能按钮函数
-    local function createMobileButton(name, icon, position)
+    local function createMobileButton(name, icon, color)
         local button = Instance.new("TextButton")
         button.Name = name
         button.Size = UDim2.new(0, 60, 0, 60)
-        button.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        button.BackgroundColor3 = color or Color3.fromRGB(60, 60, 80)
         button.TextColor3 = Color3.fromRGB(255, 255, 255)
         button.Text = icon .. "\n" .. name
         button.TextSize = 12
@@ -91,18 +91,98 @@ local function createMobileGUI()
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 8)
         corner.Parent = button
-
+        
         return button
     end
 
     -- 创建移动端功能按钮
     local buttons = {
-        flyButton = createMobileButton("飞行", "🚀", 1),
-        noclipButton = createMobileButton("穿墙", "👻", 2),
-        speedButton = createMobileButton("加速", "⚡", 3),
-        backgroundButton = createMobileButton("背景", "🎨", 4),
-        hideButton = createMobileButton("隐藏", "👁", 5)
+        flyButton = createMobileButton("飞行", "🚀", Color3.fromRGB(255, 87, 51)),
+        noclipButton = createMobileButton("穿墙", "👻", Color3.fromRGB(156, 39, 176)),
+        speedButton = createMobileButton("加速", "⚡", Color3.fromRGB(255, 193, 7)),
+        backgroundButton = createMobileButton("背景", "🎨", Color3.fromRGB(76, 175, 80)),
+        hideButton = createMobileButton("隐藏", "👁", Color3.fromRGB(33, 150, 243))
     }
+
+    -- 独立隐藏显示按钮（右上角）
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Name = "ToggleUI"
+    toggleButton.Size = UDim2.new(0, 50, 0, 50)
+    toggleButton.Position = UDim2.new(1, -60, 0, 10)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(41, 128, 185)
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.Text = "👁"
+    toggleButton.TextSize = 20
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.ZIndex = 10
+    toggleButton.Parent = screenGui
+
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 8)
+    toggleCorner.Parent = toggleButton
+
+    -- 功能设置面板
+    local settingsPanel = Instance.new("Frame")
+    settingsPanel.Name = "SettingsPanel"
+    settingsPanel.Size = UDim2.new(0, 280, 0, 200)
+    settingsPanel.Position = UDim2.new(0.5, -140, 0.5, -100)
+    settingsPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    settingsPanel.BackgroundTransparency = 0.1
+    settingsPanel.BorderSizePixel = 0
+    settingsPanel.Visible = false
+    settingsPanel.ZIndex = 5
+    settingsPanel.Parent = screenGui
+
+    local settingsCorner = Instance.new("UICorner")
+    settingsCorner.CornerRadius = UDim.new(0, 12)
+    settingsCorner.Parent = settingsPanel
+
+    local settingsHeader = Instance.new("TextLabel")
+    settingsHeader.Name = "Header"
+    settingsHeader.Size = UDim2.new(1, 0, 0, 40)
+    settingsHeader.Position = UDim2.new(0, 0, 0, 0)
+    settingsHeader.BackgroundColor3 = Color3.fromRGB(41, 128, 185)
+    settingsHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+    settingsHeader.Text = "功能设置"
+    settingsHeader.TextSize = 18
+    settingsHeader.Font = Enum.Font.GothamBold
+    settingsHeader.Parent = settingsPanel
+
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 12)
+    headerCorner.Parent = settingsHeader
+
+    -- 飞行速度调节
+    local flySpeedFrame = Instance.new("Frame")
+    flySpeedFrame.Size = UDim2.new(1, -20, 0, 40)
+    flySpeedFrame.Position = UDim2.new(0, 10, 0, 50)
+    flySpeedFrame.BackgroundTransparency = 1
+    flySpeedFrame.Parent = settingsPanel
+
+    local flySpeedLabel = Instance.new("TextLabel")
+    flySpeedLabel.Size = UDim2.new(0.5, 0, 1, 0)
+    flySpeedLabel.Position = UDim2.new(0, 0, 0, 0)
+    flySpeedLabel.BackgroundTransparency = 1
+    flySpeedLabel.Text = "飞行速度: " .. flySpeed
+    flySpeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    flySpeedLabel.TextSize = 14
+    flySpeedLabel.Font = Enum.Font.Gotham
+    flySpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+    flySpeedLabel.Parent = flySpeedFrame
+
+    local flySpeedSlider = Instance.new("TextBox")
+    flySpeedSlider.Size = UDim2.new(0.4, 0, 0.6, 0)
+    flySpeedSlider.Position = UDim2.new(0.6, 0, 0.2, 0)
+    flySpeedSlider.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    flySpeedSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
+    flySpeedSlider.Text = tostring(flySpeed)
+    flySpeedSlider.TextSize = 14
+    flySpeedSlider.PlaceholderText = "速度值"
+    flySpeedSlider.Parent = flySpeedFrame
+
+    local sliderCorner = Instance.new("UICorner")
+    sliderCorner.CornerRadius = UDim.new(0, 4)
+    sliderCorner.Parent = flySpeedSlider
 
     -- 虚拟摇杆（移动控制）
     local virtualJoystick = Instance.new("Frame")
@@ -158,10 +238,10 @@ local function createMobileGUI()
     statusLabel.Font = Enum.Font.Gotham
     statusLabel.Parent = statusPanel
 
-    return screenGui, buttons, virtualJoystick, statusLabel
+    return screenGui, buttons, toggleButton, settingsPanel, flySpeedSlider, statusLabel, virtualJoystick
 end
 
--- 移动端优化的飞行功能
+-- 优化的飞行功能
 local function enableMobileFlight()
     if not flyEnabled then
         if bodyVelocity then bodyVelocity:Destroy() end
@@ -171,9 +251,10 @@ local function enableMobileFlight()
         bodyGyro = Instance.new("BodyGyro")
 
         bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        bodyVelocity.MaxForce = Vector3.new(3000, 3000, 3000)  -- 手机端力量调小
+        bodyVelocity.MaxForce = Vector3.new(3000, 3000, 3000)
         bodyGyro.MaxTorque = Vector3.new(3000, 3000, 3000)
-        bodyGyro.P = 800  -- 手机端灵敏度调低
+        bodyGyro.P = 800
+        bodyGyro.D = 50  -- 增加阻尼系数，使飞行更稳定
 
         pcall(function()
             bodyVelocity.Parent = rootPart
@@ -181,13 +262,22 @@ local function enableMobileFlight()
         end)
 
         flyEnabled = true
+        humanoid.PlatformStand = true  -- 禁用角色物理
     end
 end
 
 local function disableMobileFlight()
     flyEnabled = false
-    if bodyVelocity then bodyVelocity:Destroy() end
-    if bodyGyro then bodyGyro:Destroy() end
+    humanoid.PlatformStand = false  -- 恢复角色物理
+    
+    if bodyVelocity then 
+        bodyVelocity:Destroy()
+        bodyVelocity = nil
+    end
+    if bodyGyro then 
+        bodyGyro:Destroy()
+        bodyGyro = nil
+    end
 end
 
 -- 移动端穿墙功能
@@ -197,146 +287,75 @@ end
 
 local function disableMobileNoclip()
     noclipEnabled = false
-end
-
--- 移动端加速功能（速度适中）
-local function enableMobileSpeedBoost()
-    if humanoid then
-        humanoid.WalkSpeed = walkSpeed * 2  -- 手机端2倍速度，更易控制
-        speedEnabled = true
-    end
-end
-
-local function disableMobileSpeedBoost()
-    if humanoid then
-        humanoid.WalkSpeed = walkSpeed
-        speedEnabled = false
-    end
-end
-
--- 根据截图风格优化的背景效果
-local function enableMobileBackground()
-    if not backgroundEnabled then
-        local lighting = game:GetService("Lighting")
-        
-        -- 保存原始设置
-        if not lighting:FindFirstChild("OriginalSettings") then
-            local original = Instance.new("Folder")
-            original.Name = "OriginalSettings"
-            
-            local amb = Instance.new("Color3Value")
-            amb.Name = "Ambient"
-            amb.Value = lighting.Ambient
-            amb.Parent = original
-            
-            local bright = Instance.new("NumberValue")
-            bright.Name = "Brightness"
-            bright.Value = lighting.Brightness
-            bright.Parent = original
-            
-            original.Parent = lighting
+    if character then
+        for _, child in ipairs(character:GetDescendants()) do
+            if child:IsA("BasePart") then
+                child.CanCollide = true
+            end
         end
-
-        -- 应用灰色调背景（匹配截图风格）
-        lighting.Ambient = Color3.fromRGB(100, 100, 100)
-        lighting.Brightness = 0.7
-        lighting.ShadowSoftness = 0.2
-        
-        backgroundEnabled = true
     end
+end
+
+-- 移动速度功能
+local function enableSpeed()
+    speedEnabled = true
+    humanoid.WalkSpeed = walkSpeed
+end
+
+local function disableSpeed()
+    speedEnabled = false
+    humanoid.WalkSpeed = originalWalkSpeed
+end
+
+-- 背景特效功能
+local function enableMobileBackground()
+    backgroundEnabled = true
+    -- 添加简单的背景特效
+    local colorCorrection = Instance.new("ColorCorrectionEffect")
+    colorCorrection.Name = "MobileBackgroundEffect"
+    colorCorrection.Parent = Lighting
+    
+    local bloom = Instance.new("BloomEffect")
+    bloom.Name = "MobileBloomEffect"
+    bloom.Intensity = 0.3
+    bloom.Parent = Lighting
 end
 
 local function disableMobileBackground()
-    if backgroundEnabled then
-        local lighting = game:GetService("Lighting")
-        local original = lighting:FindFirstChild("OriginalSettings")
-        
-        if original then
-            lighting.Ambient = original.Ambient.Value
-            lighting.Brightness = original.Brightness.Value
-        end
-        
-        backgroundEnabled = false
+    backgroundEnabled = false
+    if Lighting:FindFirstChild("MobileBackgroundEffect") then
+        Lighting.MobileBackgroundEffect:Destroy()
+    end
+    if Lighting:FindFirstChild("MobileBloomEffect") then
+        Lighting.MobileBloomEffect:Destroy()
     end
 end
 
--- 虚拟摇杆控制
-local function setupVirtualJoystick(joystick)
-    local thumb = joystick:FindFirstChild("Thumb")
-    if not thumb then return end
-
-    local isDragging = false
-    local dragStart = Vector2.new(0, 0)
-    local thumbStart = Vector2.new(0, 0)
-    local maxDistance = 40
-
-    -- 触摸开始
-    joystick.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            dragStart = Vector2.new(input.Position.X, input.Position.Y)
-            thumbStart = Vector2.new(thumb.Position.X.Offset, thumb.Position.Y.Offset)
-        end
-    end)
-
-    -- 触摸移动
-    joystick.InputChanged:Connect(function(input)
-        if isDragging and input.UserInputType == Enum.UserInputType.Touch then
-            local currentPos = Vector2.new(input.Position.X, input.Position.Y)
-            local delta = currentPos - dragStart
-            local distance = delta.Magnitude
-            
-            if distance > maxDistance then
-                delta = delta.Unit * maxDistance
-            end
-            
-            thumb.Position = UDim2.new(0, thumbStart.X + delta.X, 0, thumbStart.Y + delta.Y)
-            
-            -- 控制角色移动（简化版）
-            if humanoid and not flyEnabled then
-                local moveDirection = Vector3.new(delta.X / maxDistance, 0, -delta.Y / maxDistance)
-                humanoid:Move(moveDirection)
-            end
-        end
-    end)
-
-    -- 触摸结束
-    joystick.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = false
-            -- 平滑返回中心
-            local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-            local tween = TweenService:Create(thumb, tweenInfo, {Position = UDim2.new(0.5, -20, 0.5, -20)})
-            tween:Play()
-        end
-    end)
-end
-
--- 主初始化函数
+-- 初始化移动端脚本
 local function initializeMobileScript()
-    -- 等待横屏模式
-    while not isLandscape() do
-        RunService.Heartbeat:Wait()
-        print("等待横屏模式...")
-    end
+    local mobileGUI, buttons, toggleButton, settingsPanel, flySpeedSlider, statusLabel, virtualJoystick = createMobileGUI()
 
-    print("横屏模式检测到，初始化移动端脚本...")
+    -- 飞行速度输入框事件
+    flySpeedSlider.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            local newSpeed = tonumber(flySpeedSlider.Text)
+            if newSpeed and newSpeed > 0 and newSpeed <= 100 then
+                flySpeed = newSpeed
+                statusLabel.Text = "飞行速度已设置为: " .. flySpeed
+            else
+                flySpeedSlider.Text = tostring(flySpeed)
+                statusLabel.Text = "请输入有效的速度值 (1-100)"
+            end
+        end
+    end)
 
-    -- 创建移动端GUI
-    local mobileGUI, buttons, joystick, statusLabel = createMobileGUI()
-
-    -- 设置虚拟摇杆
-    if isMobile then
-        setupVirtualJoystick(joystick)
-    end
-
-    -- 按钮功能绑定
+    -- 功能按钮事件
     buttons.flyButton.MouseButton1Click:Connect(function()
         flyEnabled = not flyEnabled
         if flyEnabled then
             enableMobileFlight()
-            buttons.flyButton.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
-            statusLabel.Text = "飞行模式已激活\n使用摇杆控制方向"
+            buttons.flyButton.BackgroundColor3 = Color3.fromRGB(255, 87, 51)
+            statusLabel.Text = "飞行模式已激活\n使用相机方向控制移动"
         else
             disableMobileFlight()
             buttons.flyButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
@@ -348,7 +367,7 @@ local function initializeMobileScript()
         noclipEnabled = not noclipEnabled
         if noclipEnabled then
             enableMobileNoclip()
-            buttons.noclipButton.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
+            buttons.noclipButton.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
             statusLabel.Text = "穿墙模式已激活"
         else
             disableMobileNoclip()
@@ -360,11 +379,11 @@ local function initializeMobileScript()
     buttons.speedButton.MouseButton1Click:Connect(function()
         speedEnabled = not speedEnabled
         if speedEnabled then
-            enableMobileSpeedBoost()
-            buttons.speedButton.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
+            enableSpeed()
+            buttons.speedButton.BackgroundColor3 = Color3.fromRGB(255, 193, 7)
             statusLabel.Text = "加速模式已激活"
         else
-            disableMobileSpeedBoost()
+            disableSpeed()
             buttons.speedButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
             statusLabel.Text = "加速模式已关闭"
         end
@@ -384,26 +403,87 @@ local function initializeMobileScript()
     end)
 
     buttons.hideButton.MouseButton1Click:Connect(function()
+        settingsPanel.Visible = not settingsPanel.Visible
+        statusLabel.Text = settingsPanel.Visible and "设置面板已打开" or "设置面板已关闭"
+    end)
+
+    -- 独立隐藏显示按钮事件
+    toggleButton.MouseButton1Click:Connect(function()
         guiVisible = not guiVisible
         mobileGUI.Enabled = guiVisible
+        toggleButton.Text = guiVisible and "👁" or "🔲"
         statusLabel.Text = guiVisible and "界面已显示" or "界面已隐藏"
     end)
+
+    -- 触摸控制变量
+    local touchStartPos, touchCurrentPos, isTouching = nil, nil, false
+
+    -- 触摸事件处理
+    if isMobile then
+        UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
+            if gameProcessed then return end
+            
+            local touchPos = touch.Position
+            local joystickPos = virtualJoystick.AbsolutePosition
+            local joystickSize = virtualJoystick.AbsoluteSize
+            
+            -- 检查是否点击在摇杆区域
+            if touchPos.X >= joystickPos.X and touchPos.X <= joystickPos.X + joystickSize.X and
+               touchPos.Y >= joystickPos.Y and touchPos.Y <= joystickPos.Y + joystickSize.Y then
+                isTouching = true
+                touchStartPos = touchPos
+            end
+        end)
+
+        UserInputService.TouchEnded:Connect(function(touch, gameProcessed)
+            isTouching = false
+            touchStartPos = nil
+            touchCurrentPos = nil
+            
+            -- 重置摇杆位置
+            local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            local tween = TweenService:Create(virtualJoystick.Thumb, tweenInfo, {Position = UDim2.new(0.5, -20, 0.5, -20)})
+            tween:Play()
+        end)
+
+        UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
+            if not isTouching or gameProcessed then return end
+            
+            touchCurrentPos = touch.Position
+            if touchStartPos then
+                local delta = touchCurrentPos - touchStartPos
+                local maxDelta = virtualJoystick.AbsoluteSize.X / 3
+                
+                -- 限制摇杆移动范围
+                local magnitude = math.min(delta.Magnitude, maxDelta)
+                local direction = delta.Unit
+                
+                local newPos = direction * magnitude
+                local thumbPos = UDim2.new(0.5, newPos.X, 0.5, newPos.Y)
+                
+                virtualJoystick.Thumb.Position = thumbPos
+                
+                -- 飞行控制（如果飞行模式开启）
+                if flyEnabled and bodyVelocity then
+                    local moveDirection = Vector3.new(direction.X, 0, direction.Y) * flySpeed
+                    bodyVelocity.Velocity = workspace.CurrentCamera.CFrame:VectorToWorldSpace(moveDirection)
+                end
+            end
+        end)
+    end
 
     -- 主循环
     local connection
     connection = RunService.Stepped:Connect(function()
-        -- 飞行控制
-        if flyEnabled and bodyVelocity and bodyGyro then
+        -- 飞行控制优化
+        if flyEnabled and bodyGyro then
+            -- 更平滑的相机跟随
             bodyGyro.CFrame = workspace.CurrentCamera.CFrame
             
-            -- 手机端简化的飞行控制
-            local direction = Vector3.new(0, 0, 0)
-            
-            -- 这里可以添加手机特定的飞行控制逻辑
-            -- 例如使用设备陀螺仪或触摸手势
-            
-            local velocity = workspace.CurrentCamera.CFrame:VectorToWorldSpace(direction) * flySpeed
-            bodyVelocity.Velocity = velocity
+            -- 自动高度维持（防止掉落）
+            if rootPart.Position.Y < workspace.FallenPartsDestroyHeight + 10 then
+                bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, 5, bodyVelocity.Velocity.Z)
+            end
         end
 
         -- 穿墙状态维持
@@ -418,6 +498,10 @@ local function initializeMobileScript()
         -- 屏幕方向检测
         if not isLandscape() then
             statusLabel.Text = "请切换到横屏模式\n以获得最佳体验"
+        else
+            if statusLabel.Text == "请切换到横屏模式\n以获得最佳体验" then
+                statusLabel.Text = "横屏模式已就绪"
+            end
         end
     end)
 
@@ -428,11 +512,18 @@ local function initializeMobileScript()
         character = newCharacter
         humanoid = newCharacter:WaitForChild("Humanoid")
         rootPart = newCharacter:WaitForChild("HumanoidRootPart")
+        originalWalkSpeed = humanoid.WalkSpeed
         
         -- 重置状态
-        flyEnabled = false
-        noclipEnabled = false
-        speedEnabled = false
+        disableMobileFlight()
+        disableMobileNoclip()
+        disableSpeed()
+        disableMobileBackground()
+        
+        -- 重置按钮颜色
+        for _, button in pairs(buttons) do
+            button.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        end
         
         statusLabel.Text = "角色已重置\n功能已恢复默认"
     end)
