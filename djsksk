@@ -1,0 +1,332 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- 示例脚本数据（请替换为您的实际脚本链接）
+local scriptsData = {
+    {name = "无限跳跃", url = "https://raw.githubusercontent.com/example/jump.lua"},
+    {name = "飞行模式", url = "https://raw.githubusercontent.com/example/fly.lua"},
+    {name = "速度提升", url = "https://raw.githubusercontent.com/example/speed.lua"},
+    {name = "穿墙模式", url = "https://raw.githubusercontent.com/example/noclip.lua"},
+    {name = "ESP透视", url = "https://raw.githubusercontent.com/example/esp.lua"},
+    {name = "无敌模式", url = "https://raw.githubusercontent.com/example/godmode.lua"},
+    {name = "自动收集", url = "https://raw.githubusercontent.com/example/autofarm.lua"}
+}
+
+-- 存储已执行的脚本函数，用于恢复功能
+local executedScripts = {}
+
+-- 获取屏幕尺寸
+local screenSize = workspace.CurrentCamera.ViewportSize
+local isMobile = UserInputService.TouchEnabled
+
+-- 创建主界面
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MobileScriptManager"
+screenGui.Parent = playerGui
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- 移动端适配的尺寸
+local buttonSize = math.min(screenSize.X * 0.2, 80)
+local frameWidth = math.min(screenSize.X * 0.9, 400)
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, frameWidth, 0, screenSize.Y * 0.7)
+mainFrame.Position = UDim2.new(0.5, -frameWidth/2, 0.5, -screenSize.Y * 0.35)
+mainFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = mainFrame
+
+-- 标题栏（更大以适应触摸）
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 50)
+titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 12)
+titleCorner.Parent = titleBar
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1, 0, 1, 0)
+titleText.Text = "📱 脚本管理器"
+titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleText.BackgroundTransparency = 1
+titleText.Font = Enum.Font.GothamBold
+titleText.TextSize = 18
+titleText.Parent = titleBar
+
+-- 脚本列表（滚动视图）
+local scriptsList = Instance.new("ScrollingFrame")
+scriptsList.Size = UDim2.new(1, -20, 1, -120)
+scriptsList.Position = UDim2.new(0, 10, 0, 60)
+scriptsList.BackgroundTransparency = 1
+scriptsList.ScrollBarThickness = 8
+scriptsList.CanvasSize = UDim2.new(0, 0, 0, 0)
+scriptsList.Parent = mainFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 12)
+listLayout.Parent = scriptsList
+
+-- 控制按钮区域
+local controlPanel = Instance.new("Frame")
+controlPanel.Size = UDim2.new(1, -20, 0, 60)
+controlPanel.Position = UDim2.new(0, 10, 1, -70)
+controlPanel.BackgroundTransparency = 1
+controlPanel.Parent = mainFrame
+
+local controlLayout = Instance.new("UIListLayout")
+controlLayout.FillDirection = Enum.FillDirection.Horizontal
+controlLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+controlLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+controlLayout.Padding = UDim.new(0, 15)
+controlLayout.Parent = controlPanel
+
+-- 创建控制按钮函数（更大的按钮）
+local function createControlButton(text, color, size)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, size, 0, 50)
+    button.BackgroundColor3 = color
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 16
+    button.AutoButtonColor = false
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 10)
+    buttonCorner.Parent = button
+    
+    return button
+end
+
+-- 创建控制按钮
+local hideButton = createControlButton("隐藏", Color3.fromRGB(200, 50, 50), 100)
+hideButton.Parent = controlPanel
+
+local restoreButton = createControlButton("恢复", Color3.fromRGB(50, 150, 50), 100)
+restoreButton.Parent = controlPanel
+
+-- 创建显示/隐藏按钮（浮动按钮）
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, buttonSize, 0, buttonSize)
+toggleButton.Position = UDim2.new(0, 20, 0, screenSize.Y - buttonSize - 20)
+toggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+toggleButton.Text = "📱"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 24
+toggleButton.Parent = screenGui
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, buttonSize/2)
+toggleCorner.Parent = toggleButton
+
+-- 创建脚本按钮函数（更大的按钮）
+local function createScriptButton(scriptData, index)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 60)
+    button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    button.Text = "▶ " .. scriptData.name
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 16
+    button.AutoButtonColor = false
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.Padding = Left = UDim.new(0, 15)
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 10)
+    buttonCorner.Parent = button
+    
+    -- 添加图标
+    local icon = Instance.new("TextLabel")
+    icon.Size = UDim2.new(0, 30, 0, 30)
+    icon.Position = UDim2.new(1, -40, 0.5, -15)
+    icon.Text = "⚡"
+    icon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    icon.BackgroundTransparency = 1
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 18
+    icon.Parent = button
+    
+    button.MouseButton1Click:Connect(function()
+        -- 点击反馈
+        local originalColor = button.BackgroundColor3
+        button.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        
+        task.spawn(function()
+            task.wait(0.1)
+            button.BackgroundColor3 = originalColor
+        end)
+        
+        local success, result = pcall(function()
+            -- 获取脚本内容
+            local scriptContent = game:HttpGet(scriptData.url)
+            -- 执行脚本
+            local scriptFunction = loadstring(scriptContent)
+            if scriptFunction then
+                executedScripts[scriptData.name] = scriptFunction
+                scriptFunction()
+                return true
+            end
+            return false
+        end)
+        
+        if not success then
+            warn("脚本执行失败: " .. tostring(result))
+        end
+    end)
+    
+    return button
+end
+
+-- 填充脚本列表
+for i, scriptData in ipairs(scriptsData) do
+    local scriptButton = createScriptButton(scriptData, i)
+    scriptButton.Parent = scriptsList
+end
+
+-- 更新列表大小
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    scriptsList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+end)
+
+-- 显示/隐藏功能
+local isVisible = true
+
+local function toggleVisibility()
+    isVisible = not isVisible
+    
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    
+    if isVisible then
+        local tween = TweenService:Create(mainFrame, tweenInfo, {Position = UDim2.new(0.5, -frameWidth/2, 0.5, -screenSize.Y * 0.35)})
+        tween:Play()
+        toggleButton.Text = "📱"
+    else
+        local tween = TweenService:Create(mainFrame, tweenInfo, {Position = UDim2.new(1.5, -frameWidth/2, 0.5, -screenSize.Y * 0.35)})
+        tween:Play()
+        toggleButton.Text = "📱"
+    end
+end
+
+toggleButton.MouseButton1Click:Connect(toggleVisibility)
+
+-- 隐藏按钮功能
+hideButton.MouseButton1Click:Connect(function()
+    toggleVisibility()
+end)
+
+-- 恢复功能（重新执行所有已执行的脚本）
+restoreButton.MouseButton1Click:Connect(function()
+    for scriptName, scriptFunction in pairs(executedScripts) do
+        local success, errorMsg = pcall(function()
+            scriptFunction()
+        end)
+        
+        if not success then
+            warn("脚本恢复失败 (" .. scriptName .. "): " .. errorMsg)
+        end
+    end
+end)
+
+-- 按钮悬停效果（移动端优化）
+local function setupButtonHover(button, originalColor)
+    if not isMobile then
+        button.MouseEnter:Connect(function()
+            button.BackgroundColor3 = originalColor:Lerp(Color3.fromRGB(255, 255, 255), 0.2)
+        end)
+        
+        button.MouseLeave:Connect(function()
+            button.BackgroundColor3 = originalColor
+        end)
+    end
+end
+
+-- 设置按钮悬停效果
+setupButtonHover(hideButton, Color3.fromRGB(200, 50, 50))
+setupButtonHover(restoreButton, Color3.fromRGB(50, 150, 50))
+setupButtonHover(toggleButton, Color3.fromRGB(60, 60, 60))
+
+for _, button in ipairs(scriptsList:GetChildren()) do
+    if button:IsA("TextButton") then
+        setupButtonHover(button, Color3.fromRGB(60, 60, 60))
+    end
+end
+
+-- 拖拽功能（移动端适配）
+local dragging = false
+local dragStart, startPos
+
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+titleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        dragStart = input.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, 
+                                      startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        dragStart = input.Position
+    end
+end)
+
+-- 确保界面在屏幕内
+local function ensureInBounds()
+    local viewportSize = workspace.CurrentCamera.ViewportSize
+    local absPos = mainFrame.AbsolutePosition
+    local absSize = mainFrame.AbsoluteSize
+    
+    local newX = math.clamp(absPos.X, 0, viewportSize.X - absSize.X)
+    local newY = math.clamp(absPos.Y, 0, viewportSize.Y - absSize.Y)
+    
+    if absPos.X ~= newX or absPos.Y ~= newY then
+        mainFrame.Position = UDim2.new(0, newX, 0, newY)
+    end
+end
+
+-- 定期检查边界
+RunService.Heartbeat:Connect(ensureInBounds)
+
+-- 适配安全区域（避免被刘海或状态栏遮挡）
+if GuiService:GetSafeZoneOffsets then
+    local safeZone = GuiService:GetSafeZoneOffsets()
+    toggleButton.Position = UDim2.new(0, 20 + safeZone.X, 0, screenSize.Y - buttonSize - 20 - safeZone.Y)
+end
+
+print("📱 手机版脚本管理器已加载！")
+print("使用方法：")
+print("1. 点击脚本名称执行对应脚本")
+print("2. 点击'恢复'重新执行所有已执行的脚本")
+print("3. 点击'隐藏'或浮动按钮隐藏/显示界面")
+print("4. 拖拽标题栏可以移动界面")
