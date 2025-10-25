@@ -16,522 +16,408 @@ local isGamepad = UserInputService.GamepadEnabled
 
 print("设备检测: 移动设备=" .. tostring(isMobile) .. ", 手柄=" .. tostring(isGamepad))
 
--- 横屏模式检测
-local function isLandscape()
-    local viewportSize = workspace.CurrentCamera.ViewportSize
-    return viewportSize.X > viewportSize.Y
-end
+-- 卡密验证系统
+local correctPassword = "XC"
+local isVerified = false
 
--- 等待角色加载
-local character = player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local rootPart = character:WaitForChild("HumanoidRootPart")
-
--- 状态变量
-local flyEnabled = false
-local noclipEnabled = false
-local speedEnabled = false
-local backgroundEnabled = false
-local guiVisible = true
-local flySpeed = 30
-local walkSpeed = 16
-local originalWalkSpeed = humanoid.WalkSpeed
-local bodyVelocity, bodyGyro
-
--- 创建手机优化控制GUI
-local function createMobileGUI()
+-- 创建验证UI
+local function createVerificationUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "MobileControlGUI"
+    screenGui.Name = "VerificationUI"
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     screenGui.Parent = playerGui
 
-    -- 主控制面板（底部工具栏）
-    local mainPanel = Instance.new("Frame")
-    mainPanel.Name = "MainPanel"
-    mainPanel.Size = UDim2.new(1, 0, 0, 80)
-    mainPanel.Position = UDim2.new(0, 0, 1, -80)
-    mainPanel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    mainPanel.BackgroundTransparency = 0.2
-    mainPanel.BorderSizePixel = 0
-    mainPanel.Parent = screenGui
+    -- 主验证面板
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "VerificationFrame"
+    mainFrame.Size = UDim2.new(0, 320, 0, 280)
+    mainFrame.Position = UDim2.new(0.5, -160, 0.5, -140)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    mainFrame.BackgroundTransparency = 0.1
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Visible = true
+    mainFrame.ZIndex = 10
+    mainFrame.Parent = screenGui
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = mainPanel
+    corner.Parent = mainFrame
 
-    -- 功能按钮容器
-    local buttonContainer = Instance.new("Frame")
-    buttonContainer.Name = "ButtonContainer"
-    buttonContainer.Size = UDim2.new(1, -40, 1, -20)
-    buttonContainer.Position = UDim2.new(0, 20, 0, 10)
-    buttonContainer.BackgroundTransparency = 1
-    buttonContainer.Parent = mainPanel
+    -- 标题栏
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 50)
+    titleBar.Position = UDim2.new(0, 0, 0, 0)
+    titleBar.BackgroundColor3 = Color3.fromRGB(41, 128, 185)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
 
-    local uiListLayout = Instance.new("UIListLayout")
-    uiListLayout.FillDirection = Enum.FillDirection.Horizontal
-    uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    uiListLayout.Padding = UDim.new(0, 10)
-    uiListLayout.Parent = buttonContainer
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 12)
+    titleCorner.Parent = titleBar
 
-    -- 创建功能按钮函数
-    local function createMobileButton(name, icon, color)
-        local button = Instance.new("TextButton")
-        button.Name = name
-        button.Size = UDim2.new(0, 60, 0, 60)
-        button.BackgroundColor3 = color or Color3.fromRGB(60, 60, 80)
-        button.TextColor3 = Color3.fromRGB(255, 255, 255)
-        button.Text = icon .. "\n" .. name
-        button.TextSize = 12
-        button.Font = Enum.Font.GothamBold
-        button.TextWrapped = true
-        button.Parent = buttonContainer
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "TitleLabel"
+    titleLabel.Size = UDim2.new(1, 0, 1, 0)
+    titleLabel.Position = UDim2.new(0, 0, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "🔒 脚本验证系统"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextSize = 18
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Parent = titleBar
 
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 8)
-        corner.Parent = button
-        
-        return button
-    end
+    -- 验证说明
+    local description = Instance.new("TextLabel")
+    description.Name = "Description"
+    description.Size = UDim2.new(1, -40, 0, 60)
+    description.Position = UDim2.new(0, 20, 0, 60)
+    description.BackgroundTransparency = 1
+    description.Text = "请输入卡密进行验证\n卡密获取请联系管理员"
+    description.TextColor3 = Color3.fromRGB(200, 200, 200)
+    description.TextSize = 14
+    description.Font = Enum.Font.Gotham
+    description.TextWrapped = true
+    description.TextYAlignment = Enum.TextYAlignment.Top
+    description.Parent = mainFrame
 
-    -- 创建移动端功能按钮
-    local buttons = {
-        flyButton = createMobileButton("飞行", "🚀", Color3.fromRGB(255, 87, 51)),
-        noclipButton = createMobileButton("穿墙", "👻", Color3.fromRGB(156, 39, 176)),
-        speedButton = createMobileButton("加速", "⚡", Color3.fromRGB(255, 193, 7)),
-        backgroundButton = createMobileButton("背景", "🎨", Color3.fromRGB(76, 175, 80)),
-        hideButton = createMobileButton("隐藏", "👁", Color3.fromRGB(33, 150, 243))
-    }
+    -- 密码输入框
+    local passwordFrame = Instance.new("Frame")
+    passwordFrame.Name = "PasswordFrame"
+    passwordFrame.Size = UDim2.new(1, -40, 0, 50)
+    passwordFrame.Position = UDim2.new(0, 20, 0, 130)
+    passwordFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    passwordFrame.BorderSizePixel = 0
+    passwordFrame.Parent = mainFrame
 
-    -- 独立隐藏显示按钮（右上角）
-    local toggleButton = Instance.new("TextButton")
-    toggleButton.Name = "ToggleUI"
-    toggleButton.Size = UDim2.new(0, 50, 0, 50)
-    toggleButton.Position = UDim2.new(1, -60, 0, 10)
-    toggleButton.BackgroundColor3 = Color3.fromRGB(41, 128, 185)
-    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleButton.Text = "👁"
-    toggleButton.TextSize = 20
-    toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.ZIndex = 10
-    toggleButton.Parent = screenGui
+    local passwordCorner = Instance.new("UICorner")
+    passwordCorner.CornerRadius = UDim.new(0, 8)
+    passwordCorner.Parent = passwordFrame
 
-    local toggleCorner = Instance.new("UICorner")
-    toggleCorner.CornerRadius = UDim.new(0, 8)
-    toggleCorner.Parent = toggleButton
+    local passwordBox = Instance.new("TextBox")
+    passwordBox.Name = "PasswordBox"
+    passwordBox.Size = UDim2.new(1, -20, 1, -10)
+    passwordBox.Position = UDim2.new(0, 10, 0, 5)
+    passwordBox.BackgroundTransparency = 1
+    passwordBox.Text = ""
+    passwordBox.PlaceholderText = "请输入卡密..."
+    passwordBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    passwordBox.TextSize = 16
+    passwordBox.Font = Enum.Font.Gotham
+    passwordBox.ClearTextOnFocus = false
+    passwordBox.Parent = passwordFrame
 
-    -- 功能设置面板
-    local settingsPanel = Instance.new("Frame")
-    settingsPanel.Name = "SettingsPanel"
-    settingsPanel.Size = UDim2.new(0, 280, 0, 200)
-    settingsPanel.Position = UDim2.new(0.5, -140, 0.5, -100)
-    settingsPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    settingsPanel.BackgroundTransparency = 0.1
-    settingsPanel.BorderSizePixel = 0
-    settingsPanel.Visible = false
-    settingsPanel.ZIndex = 5
-    settingsPanel.Parent = screenGui
+    -- 验证按钮
+    local verifyButton = Instance.new("TextButton")
+    verifyButton.Name = "VerifyButton"
+    verifyButton.Size = UDim2.new(1, -40, 0, 45)
+    verifyButton.Position = UDim2.new(0, 20, 0, 200)
+    verifyButton.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+    verifyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    verifyButton.Text = "✅ 验证卡密"
+    verifyButton.TextSize = 16
+    verifyButton.Font = Enum.Font.GothamBold
+    verifyButton.Parent = mainFrame
 
-    local settingsCorner = Instance.new("UICorner")
-    settingsCorner.CornerRadius = UDim.new(0, 12)
-    settingsCorner.Parent = settingsPanel
+    local verifyCorner = Instance.new("UICorner")
+    verifyCorner.CornerRadius = UDim.new(0, 8)
+    verifyCorner.Parent = verifyButton
 
-    local settingsHeader = Instance.new("TextLabel")
-    settingsHeader.Name = "Header"
-    settingsHeader.Size = UDim2.new(1, 0, 0, 40)
-    settingsHeader.Position = UDim2.new(0, 0, 0, 0)
-    settingsHeader.BackgroundColor3 = Color3.fromRGB(41, 128, 185)
-    settingsHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
-    settingsHeader.Text = "功能设置"
-    settingsHeader.TextSize = 18
-    settingsHeader.Font = Enum.Font.GothamBold
-    settingsHeader.Parent = settingsPanel
-
-    local headerCorner = Instance.new("UICorner")
-    headerCorner.CornerRadius = UDim.new(0, 12)
-    headerCorner.Parent = settingsHeader
-
-    -- 飞行速度调节
-    local flySpeedFrame = Instance.new("Frame")
-    flySpeedFrame.Size = UDim2.new(1, -20, 0, 40)
-    flySpeedFrame.Position = UDim2.new(0, 10, 0, 50)
-    flySpeedFrame.BackgroundTransparency = 1
-    flySpeedFrame.Parent = settingsPanel
-
-    local flySpeedLabel = Instance.new("TextLabel")
-    flySpeedLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    flySpeedLabel.Position = UDim2.new(0, 0, 0, 0)
-    flySpeedLabel.BackgroundTransparency = 1
-    flySpeedLabel.Text = "飞行速度: " .. flySpeed
-    flySpeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flySpeedLabel.TextSize = 14
-    flySpeedLabel.Font = Enum.Font.Gotham
-    flySpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
-    flySpeedLabel.Parent = flySpeedFrame
-
-    local flySpeedSlider = Instance.new("TextBox")
-    flySpeedSlider.Size = UDim2.new(0.4, 0, 0.6, 0)
-    flySpeedSlider.Position = UDim2.new(0.6, 0, 0.2, 0)
-    flySpeedSlider.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-    flySpeedSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flySpeedSlider.Text = tostring(flySpeed)
-    flySpeedSlider.TextSize = 14
-    flySpeedSlider.PlaceholderText = "速度值"
-    flySpeedSlider.Parent = flySpeedFrame
-
-    local sliderCorner = Instance.new("UICorner")
-    sliderCorner.CornerRadius = UDim.new(0, 4)
-    sliderCorner.Parent = flySpeedSlider
-
-    -- 虚拟摇杆（移动控制）
-    local virtualJoystick = Instance.new("Frame")
-    virtualJoystick.Name = "VirtualJoystick"
-    virtualJoystick.Size = UDim2.new(0, 120, 0, 120)
-    virtualJoystick.Position = UDim2.new(0, 30, 1, -150)
-    virtualJoystick.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-    virtualJoystick.BackgroundTransparency = 0.3
-    virtualJoystick.BorderSizePixel = 0
-    virtualJoystick.Visible = isMobile
-    virtualJoystick.Parent = screenGui
-
-    local joystickCorner = Instance.new("UICorner")
-    joystickCorner.CornerRadius = UDim.new(1, 0)
-    joystickCorner.Parent = virtualJoystick
-
-    local joystickThumb = Instance.new("Frame")
-    joystickThumb.Name = "Thumb"
-    joystickThumb.Size = UDim2.new(0, 40, 0, 40)
-    joystickThumb.Position = UDim2.new(0.5, -20, 0.5, -20)
-    joystickThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    joystickThumb.BackgroundTransparency = 0.2
-    joystickThumb.BorderSizePixel = 0
-    joystickThumb.Parent = virtualJoystick
-
-    local thumbCorner = Instance.new("UICorner")
-    thumbCorner.CornerRadius = UDim.new(1, 0)
-    thumbCorner.Parent = joystickThumb
-
-    -- 状态指示器
-    local statusPanel = Instance.new("Frame")
-    statusPanel.Name = "StatusPanel"
-    statusPanel.Size = UDim2.new(0, 200, 0, 100)
-    statusPanel.Position = UDim2.new(1, -210, 0, 10)
-    statusPanel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    statusPanel.BackgroundTransparency = 0.2
-    statusPanel.BorderSizePixel = 0
-    statusPanel.Parent = screenGui
-
-    local statusCorner = Instance.new("UICorner")
-    statusCorner.CornerRadius = UDim.new(0, 8)
-    statusCorner.Parent = statusPanel
-
+    -- 状态提示
     local statusLabel = Instance.new("TextLabel")
-    statusLabel.Name = "StatusText"
-    statusLabel.Size = UDim2.new(1, -10, 1, -10)
-    statusLabel.Position = UDim2.new(0, 5, 0, 5)
+    statusLabel.Name = "StatusLabel"
+    statusLabel.Size = UDim2.new(1, -40, 0, 30)
+    statusLabel.Position = UDim2.new(0, 20, 0, 250)
     statusLabel.BackgroundTransparency = 1
-    statusLabel.Text = "就绪"
+    statusLabel.Text = "等待验证..."
     statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     statusLabel.TextSize = 14
-    statusLabel.TextWrapped = true
     statusLabel.Font = Enum.Font.Gotham
-    statusLabel.Parent = statusPanel
+    statusLabel.Parent = mainFrame
 
-    return screenGui, buttons, toggleButton, settingsPanel, flySpeedSlider, statusLabel, virtualJoystick
-end
-
--- 优化的飞行功能
-local function enableMobileFlight()
-    if not flyEnabled then
-        if bodyVelocity then bodyVelocity:Destroy() end
-        if bodyGyro then bodyGyro:Destroy() end
-
-        bodyVelocity = Instance.new("BodyVelocity")
-        bodyGyro = Instance.new("BodyGyro")
-
-        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        bodyVelocity.MaxForce = Vector3.new(3000, 3000, 3000)
-        bodyGyro.MaxTorque = Vector3.new(3000, 3000, 3000)
-        bodyGyro.P = 800
-        bodyGyro.D = 50  -- 增加阻尼系数，使飞行更稳定
-
-        pcall(function()
-            bodyVelocity.Parent = rootPart
-            bodyGyro.Parent = rootPart
-        end)
-
-        flyEnabled = true
-        humanoid.PlatformStand = true  -- 禁用角色物理
-    end
-end
-
-local function disableMobileFlight()
-    flyEnabled = false
-    humanoid.PlatformStand = false  -- 恢复角色物理
-    
-    if bodyVelocity then 
-        bodyVelocity:Destroy()
-        bodyVelocity = nil
-    end
-    if bodyGyro then 
-        bodyGyro:Destroy()
-        bodyGyro = nil
-    end
-end
-
--- 移动端穿墙功能
-local function enableMobileNoclip()
-    noclipEnabled = true
-end
-
-local function disableMobileNoclip()
-    noclipEnabled = false
-    if character then
-        for _, child in ipairs(character:GetDescendants()) do
-            if child:IsA("BasePart") then
-                child.CanCollide = true
-            end
-        end
-    end
-end
-
--- 移动速度功能
-local function enableSpeed()
-    speedEnabled = true
-    humanoid.WalkSpeed = walkSpeed
-end
-
-local function disableSpeed()
-    speedEnabled = false
-    humanoid.WalkSpeed = originalWalkSpeed
-end
-
--- 背景特效功能
-local function enableMobileBackground()
-    backgroundEnabled = true
-    -- 添加简单的背景特效
-    local colorCorrection = Instance.new("ColorCorrectionEffect")
-    colorCorrection.Name = "MobileBackgroundEffect"
-    colorCorrection.Parent = Lighting
-    
-    local bloom = Instance.new("BloomEffect")
-    bloom.Name = "MobileBloomEffect"
-    bloom.Intensity = 0.3
-    bloom.Parent = Lighting
-end
-
-local function disableMobileBackground()
-    backgroundEnabled = false
-    if Lighting:FindFirstChild("MobileBackgroundEffect") then
-        Lighting.MobileBackgroundEffect:Destroy()
-    end
-    if Lighting:FindFirstChild("MobileBloomEffect") then
-        Lighting.MobileBloomEffect:Destroy()
-    end
-end
-
--- 初始化移动端脚本
-local function initializeMobileScript()
-    local mobileGUI, buttons, toggleButton, settingsPanel, flySpeedSlider, statusLabel, virtualJoystick = createMobileGUI()
-
-    -- 飞行速度输入框事件
-    flySpeedSlider.FocusLost:Connect(function(enterPressed)
-        if enterPressed then
-            local newSpeed = tonumber(flySpeedSlider.Text)
-            if newSpeed and newSpeed > 0 and newSpeed <= 100 then
-                flySpeed = newSpeed
-                statusLabel.Text = "飞行速度已设置为: " .. flySpeed
-            else
-                flySpeedSlider.Text = tostring(flySpeed)
-                statusLabel.Text = "请输入有效的速度值 (1-100)"
-            end
-        end
-    end)
-
-    -- 功能按钮事件
-    buttons.flyButton.MouseButton1Click:Connect(function()
-        flyEnabled = not flyEnabled
-        if flyEnabled then
-            enableMobileFlight()
-            buttons.flyButton.BackgroundColor3 = Color3.fromRGB(255, 87, 51)
-            statusLabel.Text = "飞行模式已激活\n使用相机方向控制移动"
-        else
-            disableMobileFlight()
-            buttons.flyButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-            statusLabel.Text = "飞行模式已关闭"
-        end
-    end)
-
-    buttons.noclipButton.MouseButton1Click:Connect(function()
-        noclipEnabled = not noclipEnabled
-        if noclipEnabled then
-            enableMobileNoclip()
-            buttons.noclipButton.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
-            statusLabel.Text = "穿墙模式已激活"
-        else
-            disableMobileNoclip()
-            buttons.noclipButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-            statusLabel.Text = "穿墙模式已关闭"
-        end
-    end)
-
-    buttons.speedButton.MouseButton1Click:Connect(function()
-        speedEnabled = not speedEnabled
-        if speedEnabled then
-            enableSpeed()
-            buttons.speedButton.BackgroundColor3 = Color3.fromRGB(255, 193, 7)
-            statusLabel.Text = "加速模式已激活"
-        else
-            disableSpeed()
-            buttons.speedButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-            statusLabel.Text = "加速模式已关闭"
-        end
-    end)
-
-    buttons.backgroundButton.MouseButton1Click:Connect(function()
-        backgroundEnabled = not backgroundEnabled
-        if backgroundEnabled then
-            enableMobileBackground()
-            buttons.backgroundButton.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
-            statusLabel.Text = "背景特效已激活"
-        else
-            disableMobileBackground()
-            buttons.backgroundButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-            statusLabel.Text = "背景特效已关闭"
-        end
-    end)
-
-    buttons.hideButton.MouseButton1Click:Connect(function()
-        settingsPanel.Visible = not settingsPanel.Visible
-        statusLabel.Text = settingsPanel.Visible and "设置面板已打开" or "设置面板已关闭"
-    end)
-
-    -- 独立隐藏显示按钮事件
-    toggleButton.MouseButton1Click:Connect(function()
-        guiVisible = not guiVisible
-        mobileGUI.Enabled = guiVisible
-        toggleButton.Text = guiVisible and "👁" or "🔲"
-        statusLabel.Text = guiVisible and "界面已显示" or "界面已隐藏"
-    end)
-
-    -- 触摸控制变量
-    local touchStartPos, touchCurrentPos, isTouching = nil, nil, false
-
-    -- 触摸事件处理
-    if isMobile then
-        UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
-            if gameProcessed then return end
+    -- 验证按钮点击事件
+    verifyButton.MouseButton1Click:Connect(function()
+        local inputPassword = passwordBox.Text
+        if inputPassword == correctPassword then
+            isVerified = true
+            statusLabel.Text = "✅ 验证成功！正在加载脚本..."
+            statusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
             
-            local touchPos = touch.Position
-            local joystickPos = virtualJoystick.AbsolutePosition
-            local joystickSize = virtualJoystick.AbsoluteSize
-            
-            -- 检查是否点击在摇杆区域
-            if touchPos.X >= joystickPos.X and touchPos.X <= joystickPos.X + joystickSize.X and
-               touchPos.Y >= joystickPos.Y and touchPos.Y <= joystickPos.Y + joystickSize.Y then
-                isTouching = true
-                touchStartPos = touchPos
-            end
-        end)
-
-        UserInputService.TouchEnded:Connect(function(touch, gameProcessed)
-            isTouching = false
-            touchStartPos = nil
-            touchCurrentPos = nil
-            
-            -- 重置摇杆位置
-            local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-            local tween = TweenService:Create(virtualJoystick.Thumb, tweenInfo, {Position = UDim2.new(0.5, -20, 0.5, -20)})
+            -- 渐变消失效果
+            local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            local tween = TweenService:Create(mainFrame, tweenInfo, {BackgroundTransparency = 1})
             tween:Play()
-        end)
-
-        UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
-            if not isTouching or gameProcessed then return end
             
-            touchCurrentPos = touch.Position
-            if touchStartPos then
-                local delta = touchCurrentPos - touchStartPos
-                local maxDelta = virtualJoystick.AbsoluteSize.X / 3
-                
-                -- 限制摇杆移动范围
-                local magnitude = math.min(delta.Magnitude, maxDelta)
-                local direction = delta.Unit
-                
-                local newPos = direction * magnitude
-                local thumbPos = UDim2.new(0.5, newPos.X, 0.5, newPos.Y)
-                
-                virtualJoystick.Thumb.Position = thumbPos
-                
-                -- 飞行控制（如果飞行模式开启）
-                if flyEnabled and bodyVelocity then
-                    local moveDirection = Vector3.new(direction.X, 0, direction.Y) * flySpeed
-                    bodyVelocity.Velocity = workspace.CurrentCamera.CFrame:VectorToWorldSpace(moveDirection)
-                end
-            end
-        end)
-    end
-
-    -- 主循环
-    local connection
-    connection = RunService.Stepped:Connect(function()
-        -- 飞行控制优化
-        if flyEnabled and bodyGyro then
-            -- 更平滑的相机跟随
-            bodyGyro.CFrame = workspace.CurrentCamera.CFrame
+            wait(0.5)
+            screenGui:Destroy()
             
-            -- 自动高度维持（防止掉落）
-            if rootPart.Position.Y < workspace.FallenPartsDestroyHeight + 10 then
-                bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, 5, bodyVelocity.Velocity.Z)
-            end
-        end
-
-        -- 穿墙状态维持
-        if noclipEnabled and character then
-            for _, child in ipairs(character:GetDescendants()) do
-                if child:IsA("BasePart") then
-                    child.CanCollide = false
-                end
-            end
-        end
-
-        -- 屏幕方向检测
-        if not isLandscape() then
-            statusLabel.Text = "请切换到横屏模式\n以获得最佳体验"
+            -- 验证成功后加载主脚本
+            loadMainScript()
         else
-            if statusLabel.Text == "请切换到横屏模式\n以获得最佳体验" then
-                statusLabel.Text = "横屏模式已就绪"
-            end
+            statusLabel.Text = "❌ 卡密错误，请重试"
+            statusLabel.TextColor3 = Color3.fromRGB(231, 76, 60)
+            
+            -- 错误震动效果
+            local shakeTween = TweenService:Create(mainFrame, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 3, true), {
+                Position = UDim2.new(0.5, -165, 0.5, -140)
+            })
+            shakeTween:Play()
         end
     end)
 
-    statusLabel.Text = "移动端脚本已加载\n专为横屏优化"
-
-    -- 角色重置处理
-    player.CharacterAdded:Connect(function(newCharacter)
-        character = newCharacter
-        humanoid = newCharacter:WaitForChild("Humanoid")
-        rootPart = newCharacter:WaitForChild("HumanoidRootPart")
-        originalWalkSpeed = humanoid.WalkSpeed
-        
-        -- 重置状态
-        disableMobileFlight()
-        disableMobileNoclip()
-        disableSpeed()
-        disableMobileBackground()
-        
-        -- 重置按钮颜色
-        for _, button in pairs(buttons) do
-            button.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    -- 回车键验证
+    passwordBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            verifyButton.MouseButton1Click:Execute()
         end
-        
-        statusLabel.Text = "角色已重置\n功能已恢复默认"
     end)
 end
 
--- 启动移动端脚本
-if isMobile then
-    initializeMobileScript()
-else
-    print("检测到非移动设备，建议使用PC版脚本")
+-- 主脚本功能
+local function loadMainScript()
+    -- 等待角色加载
+    local character = player.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+
+    -- 状态变量
+    local flyEnabled = false
+    local noclipEnabled = false
+    local speedEnabled = false
+    local backgroundEnabled = false
+    local guiVisible = true
+    local flySpeed = 30
+    local walkSpeed = 16
+    local originalWalkSpeed = humanoid.WalkSpeed
+    local bodyVelocity, bodyGyro
+
+    -- 横屏模式检测
+    local function isLandscape()
+        local viewportSize = workspace.CurrentCamera.ViewportSize
+        return viewportSize.X > viewportSize.Y
+    end
+
+    -- 创建手机优化控制GUI
+    local function createMobileGUI()
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "MobileControlGUI"
+        screenGui.ResetOnSpawn = false
+        screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        screenGui.Parent = playerGui
+
+        -- 主控制面板（底部工具栏）
+        local mainPanel = Instance.new("Frame")
+        mainPanel.Name = "MainPanel"
+        mainPanel.Size = UDim2.new(1, 0, 0, 80)
+        mainPanel.Position = UDim2.new(0, 0, 1, -80)
+        mainPanel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+        mainPanel.BackgroundTransparency = 0.2
+        mainPanel.BorderSizePixel = 0
+        mainPanel.Parent = screenGui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 12)
+        corner.Parent = mainPanel
+
+        -- 功能按钮容器
+        local buttonContainer = Instance.new("Frame")
+        buttonContainer.Name = "ButtonContainer"
+        buttonContainer.Size = UDim2.new(1, -40, 1, -20)
+        buttonContainer.Position = UDim2.new(0, 20, 0, 10)
+        buttonContainer.BackgroundTransparency = 1
+        buttonContainer.Parent = mainPanel
+
+        local uiListLayout = Instance.new("UIListLayout")
+        uiListLayout.FillDirection = Enum.FillDirection.Horizontal
+        uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        uiListLayout.Padding = UDim.new(0, 10)
+        uiListLayout.Parent = buttonContainer
+
+        -- 创建功能按钮函数
+        local function createMobileButton(name, icon, color)
+            local button = Instance.new("TextButton")
+            button.Name = name
+            button.Size = UDim2.new(0, 60, 0, 60)
+            button.BackgroundColor3 = color or Color3.fromRGB(60, 60, 80)
+            button.TextColor3 = Color3.fromRGB(255, 255, 255)
+            button.Text = icon .. "\n" .. name
+            button.TextSize = 12
+            button.Font = Enum.Font.GothamBold
+            button.TextWrapped = true
+            button.Parent = buttonContainer
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 8)
+            corner.Parent = button
+            
+            return button
+        end
+
+        -- 创建移动端功能按钮
+        local buttons = {
+            flyButton = createMobileButton("飞行", "🚀", Color3.fromRGB(255, 87, 51)),
+            noclipButton = createMobileButton("穿墙", "👻", Color3.fromRGB(156, 39, 176)),
+            speedButton = createMobileButton("加速", "⚡", Color3.fromRGB(255, 193, 7)),
+            backgroundButton = createMobileButton("背景", "🎨", Color3.fromRGB(76, 175, 80)),
+            hideButton = createMobileButton("隐藏", "👁", Color3.fromRGB(33, 150, 243))
+        }
+
+        -- 状态显示标签
+        local statusLabel = Instance.new("TextLabel")
+        statusLabel.Name = "StatusLabel"
+        statusLabel.Size = UDim2.new(0.3, 0, 1, -10)
+        statusLabel.Position = UDim2.new(0.7, 0, 0, 5)
+        statusLabel.BackgroundTransparency = 1
+        statusLabel.Text = "脚本已加载\n验证状态: ✅"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        statusLabel.TextSize = 12
+        statusLabel.Font = Enum.Font.Gotham
+        statusLabel.TextWrapped = true
+        statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+        statusLabel.Parent = mainPanel
+
+        -- 功能实现
+        local function enableFlight()
+            if not flyEnabled then
+                flyEnabled = true
+                bodyVelocity = Instance.new("BodyVelocity")
+                bodyGyro = Instance.new("BodyGyro")
+                
+                bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+                bodyVelocity.MaxForce = Vector3.new(40000, 40000, 40000)
+                bodyVelocity.Parent = rootPart
+                
+                bodyGyro.MaxTorque = Vector3.new(40000, 40000, 40000)
+                bodyGyro.P = 1000
+                bodyGyro.D = 100
+                bodyGyro.Parent = rootPart
+                
+                buttons.flyButton.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+                statusLabel.Text = "飞行模式: 开启"
+            else
+                flyEnabled = false
+                if bodyVelocity then bodyVelocity:Destroy() end
+                if bodyGyro then bodyGyro:Destroy() end
+                buttons.flyButton.BackgroundColor3 = Color3.fromRGB(255, 87, 51)
+                statusLabel.Text = "飞行模式: 关闭"
+            end
+        end
+
+        local function enableNoclip()
+            noclipEnabled = not noclipEnabled
+            if noclipEnabled then
+                buttons.noclipButton.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+                statusLabel.Text = "穿墙模式: 开启"
+            else
+                buttons.noclipButton.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+                statusLabel.Text = "穿墙模式: 关闭"
+            end
+        end
+
+        local function enableSpeed()
+            speedEnabled = not speedEnabled
+            if speedEnabled then
+                humanoid.WalkSpeed = walkSpeed
+                buttons.speedButton.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+                statusLabel.Text = "加速模式: 开启"
+            else
+                humanoid.WalkSpeed = originalWalkSpeed
+                buttons.speedButton.BackgroundColor3 = Color3.fromRGB(255, 193, 7)
+                statusLabel.Text = "加速模式: 关闭"
+            end
+        end
+
+        local function enableBackground()
+            backgroundEnabled = not backgroundEnabled
+            if backgroundEnabled then
+                Lighting.Brightness = 2
+                Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+                buttons.backgroundButton.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+                statusLabel.Text = "背景优化: 开启"
+            else
+                Lighting.Brightness = 1
+                Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+                buttons.backgroundButton.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
+                statusLabel.Text = "背景优化: 关闭"
+            end
+        end
+
+        local function toggleGUI()
+            guiVisible = not guiVisible
+            mainPanel.Visible = guiVisible
+            if guiVisible then
+                buttons.hideButton.Text = "👁\n隐藏"
+                statusLabel.Text = "UI面板: 显示"
+            else
+                buttons.hideButton.Text = "👁\n显示"
+                statusLabel.Text = "UI面板: 隐藏"
+            end
+        end
+
+        -- 按钮点击事件
+        buttons.flyButton.MouseButton1Click:Connect(enableFlight)
+        buttons.noclipButton.MouseButton1Click:Connect(enableNoclip)
+        buttons.speedButton.MouseButton1Click:Connect(enableSpeed)
+        buttons.backgroundButton.MouseButton1Click:Connect(enableBackground)
+        buttons.hideButton.MouseButton1Click:Connect(toggleGUI)
+
+        -- 主循环
+        local connection
+        connection = RunService.Stepped:Connect(function()
+            -- 飞行控制
+            if flyEnabled and bodyGyro then
+                bodyGyro.CFrame = workspace.CurrentCamera.CFrame
+            end
+
+            -- 穿墙状态
+            if noclipEnabled and character then
+                for _, child in ipairs(character:GetDescendants()) do
+                    if child:IsA("BasePart") then
+                        child.CanCollide = false
+                    end
+                end
+            end
+
+            -- 屏幕方向检测
+            if not isLandscape() then
+                statusLabel.Text = "请切换到横屏模式"
+            end
+        end)
+
+        -- 角色重置处理
+        player.CharacterAdded:Connect(function(newCharacter)
+            character = newCharacter
+            humanoid = newCharacter:WaitForChild("Humanoid")
+            rootPart = newCharacter:WaitForChild("HumanoidRootPart")
+            originalWalkSpeed = humanoid.WalkSpeed
+            
+            -- 重置状态
+            flyEnabled = false
+            noclipEnabled = false
+            speedEnabled = false
+            backgroundEnabled = false
+            
+            -- 重置按钮颜色
+            for _, button in pairs(buttons) do
+                button.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+            end
+            
+            statusLabel.Text = "角色已重置"
+        end)
+    end
+
+    -- 启动移动端脚本
+    if isMobile then
+        createMobileGUI()
+        print("移动端脚本已加载 - 验证状态: ✅")
+    else
+        print("检测到非移动设备")
+    end
+end
+
+-- 启动验证系统
+if not isVerified then
+    createVerificationUI()
 end
